@@ -1,0 +1,926 @@
+import javax.swing.JOptionPane;
+
+PFont style; 
+
+final float GOLDRAT=1/1.61803398875;
+int maxNum=60;
+float[] objX=new float[maxNum];
+float[] objY=new float[maxNum];
+float[] objZ=new float[maxNum];
+float[] objVelX=new float[maxNum];
+float[] objVelY=new float[maxNum];
+float[] objVelZ=new float[maxNum];
+float[] objSize=new float[maxNum];
+float[] newSize=new float[maxNum];
+int[] indexZ=new int[maxNum];
+
+float[] pull=new float[maxNum];
+float[][] magPull=new float[maxNum][maxNum];
+float[][] angPull=new float[maxNum][maxNum];
+float[][] magPullXYZ=new float[maxNum][maxNum];
+float[][] angPullXYZ=new float[maxNum][maxNum];
+
+float[] velPullX=new float[maxNum];
+float[] velPullY=new float[maxNum];
+float[] velPullZ=new float[maxNum];
+int maxCur=maxNum;
+
+color[]col=new color[maxNum];
+//http://www.vendian.org/mncharity/dir3/starcolor/
+//OBA FG KM
+float[] R0={155, 170, 202, 248, 255, 255, 255};
+float[] G0={176, 191, 215, 247, 244, 210, 204};
+float[] B0={255, 255, 255, 255, 234, 161, 111};
+color[] starRef={ #9bb0ff, #aabfff, #cad7ff, #f8f7ff, #fff4ea, #ffd2a1, #ffcc6f};
+color[] stellaTypes={#9db4ff, //O
+  #a2b9ff, #a7bcff, #aabfff, #afc3ff, //B
+  #baccff, #c0d1ff, #cad8ff, //A
+  #e4e8ff, #edeeff, #fbf8ff, #fff9f9, //F
+  #fff5ec, #fff4e8, #fff1df, //G
+  #ffebd1, #ffd7ae, #ffc690, //K
+  #ffbe7f, #ffbb7b, #ffbb7b//M
+};
+
+int timer=0;
+//timer
+int startingTime;
+final String prefix = "This trial has been running for ";
+
+boolean[] collision=new boolean[maxNum];
+boolean[] collided=new boolean[maxNum];
+boolean[] bounced=new boolean[maxNum];
+
+
+color complement;
+color background=0;
+
+float sizeRef=30;
+
+char[] stellarClass= new char[maxNum];
+int[] indexSize=new int[maxNum];
+//float[] luminosity=new float[maxNum];
+
+float massRefRef=pow(GOLDRAT, pow(GOLDRAT, -pow(GOLDRAT, -2)));
+
+float[] magCol=new float[stellaTypes.length];
+float colMin=0;
+
+float enLoss=1.5;
+/*
+*********************************************FLAIR STUFF**********
+ */
+float radCirRef4;
+int maxNum4=maxCur/2;
+float[][] radWave4=new float[maxCur][maxNum4];
+float[][] radCir4=new float[maxCur][maxNum4];
+float[][] angCir4=new float[maxCur][maxNum4];
+float[][] angWave4=new float[maxCur][maxNum4];
+float[][] spWave4=new float[maxCur][maxNum4];
+int maxCur4=maxNum4;
+
+float[][] partiVel4=new float[maxCur][maxNum4];
+float[][] pull4=new float[maxCur][maxNum4];
+float[][] pullAng4=new float[maxCur][maxNum4];
+
+float[][] partiX4=new float[maxCur][maxNum4];
+float[][] partiY4=new float[maxCur][maxNum4];
+
+int[][] index4= new int[maxCur][maxNum4];
+int ampCount4=1;
+
+float partiSize=0.5;
+/*
+***************************************MAIN**************
+ */
+void setup() {
+  style=loadFont("SegoePrint-48.vlw");
+  textFont(style);
+  //size(700,400);
+  fullScreen();
+  smooth(6);
+  background(background);
+  initi(0);
+
+  startingTime = millis();
+
+  //to calculate the "smallest" color
+  for (int j=0; j<magCol.length; j++)
+    magCol[j]=mag(red(stellaTypes[j]), green(stellaTypes[j]), blue(stellaTypes[j]));
+  colMin=magCol[0];
+  int indexCol=0;
+  for (int j=0; j<magCol.length; j++)
+    if (magCol[j]<colMin) {
+      indexCol=j;
+      colMin=magCol[j];
+    }//if
+  //feed into complement
+  complement=fillComplement(red(stellaTypes[indexCol]), green(stellaTypes[indexCol]), blue(stellaTypes[indexCol]));
+}//setup
+
+void draw() {  
+  //frameRate(30);
+  if (!showTrail)
+    background(background);
+  else
+    noStroke();
+
+  fill(complement);
+  if (clock) 
+    drawClock();
+  if (trialTime)
+    drawTrialTime();
+
+  for (int obj=0; obj<maxCur; obj++)
+  if(objZ[obj]<=max(width, height)&&objZ[obj]>=0)
+    newSize[obj]=objSize[obj]+constrain(map(objZ[obj], 0, max(width, height), 0, min(width, height)), -objSize[obj], min(width, height));
+  indexZ=indexZ();
+  for (int obj=0; obj<maxCur; obj++) {
+    //for (int k=0; k<maxCur; k++) {
+    //  println(objZ[k]);
+    //  println(indexZ[k]);
+    //}
+    //exit();
+
+    /* On layering ellipses:
+     (int k=0; k<maxCur; k++) is better than (int k=maxCur-1; k>=0; k--)
+     (int k=0; k<=indexZ[obj]; k++) (int k=indexZ[obj]; k<maxCur; k++)
+     */
+    if (collision[indexZ[obj]]) {
+      //calcParti(indexZ[obj]);
+      //drawCurve(indexZ[obj]);
+      for (int k=indexZ[obj]; k<maxCur; k++)
+        if (magPull[indexZ[obj]][k]<=(newSize[indexZ[obj]]+newSize[k])/2) {//for all objects underneath the current indexed object, draw them once 
+          if (collision[k]) {
+            calcParti(k);
+            drawCurve(k);
+          }//if
+          drawObj(k);
+        }//if
+      moveParticle(indexZ[obj]);
+      modParticle(indexZ[obj]);
+      collided[indexZ[obj]]=true;
+    } else
+      for (int k=indexZ[obj]; k<maxCur; k++)
+        if (magPull[indexZ[obj]][k]<=(newSize[indexZ[obj]]+newSize[k])/2) {
+          if (collision[k]) {
+            calcParti(k);
+            drawCurve(k);
+          }//if
+          drawObj(k);
+        }//if
+  }//for
+  movement();
+
+  timer++;
+}//draw
+
+/*
+***************************************************************************CLOCK STUFF**************************************
+ */
+boolean clock=false;
+boolean leftClick=true;
+boolean trialTime=false;
+int clickCount=0;
+float mousePosX=0, mousePosY=0;
+float fontSize;
+void mousePressed() {
+  clock=!clock;
+  if (mouseButton==LEFT)
+    leftClick=true;
+  else
+    leftClick=false;
+  clickCount++;
+  if (clickCount%3<=1)
+    trialTime=true;
+  else
+    trialTime=false;
+  clickCount= clickCount %4;
+  //println(clickCount);
+  fontSize=min(width/2, height/2)*pow(GOLDRAT, 6.5);
+  mousePosX=mouseX;
+  mousePosY=mouseY;
+}//mousePressed
+
+boolean showTrail=false;
+boolean restart=false;
+void keyPressed() {
+  if (key==' ')
+    showTrail=!showTrail;
+  else if (key=='a'||key=='A') {
+    initi(1);
+    background(background);
+    startingTime = millis();
+    restart=true;
+  } else {
+    initi(0);
+    background(background);
+    startingTime = millis();
+    restart=true;
+  }//if
+}//keyPressed
+
+String time;
+void drawClock() {
+
+  textSize(fontSize);
+  textAlign(CENTER, CENTER);
+  String min, sec, nano;
+
+  long milisec= System.currentTimeMillis();
+  milisec=milisec-(milisec/1000*1000);
+  if (second()<10)
+    sec=": 0";
+  else
+    sec=": ";
+  if (minute()<10)
+    min=": 0";
+  else
+    min=": ";
+  if (milisec<100) {
+    if (milisec<10)
+      if (milisec==0)
+        nano=": 000";
+      else
+        nano=": 00";
+    else
+      nano=": 0";
+  } else
+    nano=": ";  
+  time= hour()+min + minute()+sec + second()+nano+ milisec;
+  String date= day()+"/"+ month()+"/"+year();
+  if (leftClick) {
+    backPlate(mousePosX, -1.5*fontSize+mousePosY-fontSize/2, time+min, fontSize, 255*pow(GOLDRAT, 2));
+    fill(complement);
+    text(time, mousePosX, mousePosY-fontSize/2);
+  } else {
+    backPlate(mousePosX, -1.5*fontSize+mousePosY-fontSize/2, date+min, fontSize, 255*pow(GOLDRAT, 2));
+    fill(complement);
+    text(date, mousePosX, mousePosY-fontSize/2);
+  }//if
+}//drawClock
+
+String zero="";
+String one="";
+boolean zerod=false;
+float size0=1, size1=1;
+void drawTrialTime() {
+  int seconds = (millis() - startingTime) / 1000;
+  int minutes = seconds / 60;
+  int hours = minutes / 60;
+  int days = hours / 24;
+  seconds -= minutes * 60;
+  minutes -= hours * 60;
+  hours -= days * 24;
+
+  String message = prefix +
+    GetPlural(days, "day") + " " +
+    GetPlural(hours, "hour") + " " +
+    GetPlural(minutes, "minute") + " and " +
+    GetPlural(seconds, "second");
+
+  textAlign(CENTER, CENTER);
+  textSize(fontSize*pow(GOLDRAT, 1.5));
+  backPlate(mousePosX, fontSize*pow(GOLDRAT, 1.5)*GOLDRAT+mousePosY-textAscent()*2, message+days, fontSize*pow(GOLDRAT, 1.5)+textAscent(), 255*pow(GOLDRAT, 2));
+  fill(complement);
+  text(message, mousePosX, fontSize+mousePosY);
+
+  textSize(fontSize*pow(GOLDRAT, -1.5));
+  message="\n\n"+ptCount();
+  backPlate(mousePosX, fontSize+mousePosY+4, message+"0", fontSize*pow(GOLDRAT, -1.5)-4, 255*pow(GOLDRAT, 2));
+  fill(complement);
+  text(message, mousePosX, fontSize+mousePosY);
+
+  textSize(fontSize);
+  message="\n\n\n\n\n\n\non the screen";
+  backPlate(mousePosX, fontSize*4.65+mousePosY, message, fontSize, 255*pow(GOLDRAT, 2));
+  fill(complement);
+  text(message, mousePosX, fontSize+mousePosY);
+
+  if (!zerod) {
+    if (ptCount()==0) {
+      zero+=ptCount()+" at\n"+time+"\n";
+      size0++;
+      zerod=!zerod;
+    }//if
+  } else {
+    if (ptCount()>0) {
+      one+=ptCount()+" at\n"+time+"\n";
+      size1++;
+      zerod=!zerod;
+    }//if
+  }//if
+  if (restart) {
+    one="";
+    zero="";
+    size0=1;
+    size1=1;
+    restart=false;
+  }//if
+  textAlign(CENTER, TOP);
+  textSize(fontSize*pow(GOLDRAT, 1.5));
+  backPlate(mousePosX, fontSize*6+mousePosY, zero+days, size0*1*fontSize*pow(GOLDRAT, 1.5)+textAscent(), 255*pow(GOLDRAT, 2));
+  fill(complement);
+  text(zero, mousePosX, fontSize*7+mousePosY);
+  backPlate(mousePosX+textWidth(days+zero+days), fontSize*6+mousePosY, one+days, size1*1*fontSize*pow(GOLDRAT, 1.5)+textAscent(), 255*pow(GOLDRAT, 2));
+  fill(complement);
+  text(one, mousePosX+textWidth(days+zero+days), fontSize*7+mousePosY);
+  println(one);
+  //exit();
+}//drawTrialTime
+
+String GetPlural(int value, String word) {
+  if (value == 1)
+    return value + " " + word;
+  // Ad hoc for current sketch,
+  // I have something more elaborate for irregular plurals
+  return value + " " + word + "s";
+}//GetPlural
+
+void backPlate(float x, float y, String message, float textSize, float alpha) {
+  fill(background, alpha);
+  rectMode(CENTER);
+  rect(x, y+textSize*1.6, textWidth(message), textSize);
+}//backPlate
+
+/*
+************************************************************************ORBIT STUFF********************************************
+ */
+
+color fillComplement(float R, float G, float B) {//for clock
+  float minRGB = min(R, min(G, B));
+  float maxRGB = max(R, max(G, B));
+  float minPlusMax = minRGB + maxRGB;
+  color complement = color(minPlusMax-R, minPlusMax-G, minPlusMax-B);
+  return complement;
+}//fillComplement
+void instant() {
+  objX=new float[maxNum];
+  objY=new float[maxNum];
+  objZ=new float[maxNum];
+  objVelX=new float[maxNum];
+  objVelY=new float[maxNum];
+  objVelZ=new float[maxNum];
+  objSize=new float[maxNum];
+  newSize=new float[maxNum];
+  indexZ=new int[maxNum];
+
+  pull=new float[maxNum];
+  magPull=new float[maxNum][maxNum];
+  angPull=new float[maxNum][maxNum];
+  magPullXYZ=new float[maxNum][maxNum];
+  angPullXYZ=new float[maxNum][maxNum];
+
+  velPullX=new float[maxNum];
+  velPullY=new float[maxNum];
+  velPullZ=new float[maxNum];
+  maxCur=maxNum;
+
+  col=new color[maxNum];
+
+  collision=new boolean[maxNum];
+  collided=new boolean[maxNum];
+  bounced=new boolean[maxNum];
+
+  radWave4=new float[maxCur][maxNum4];
+  angWave4=new float[maxCur][maxNum4];
+  radCir4=new float[maxCur][maxNum4];
+  angCir4=new float[maxCur][maxNum4];
+  spWave4=new float[maxCur][maxNum4];
+
+  partiVel4=new float[maxCur][maxNum4];
+  pull4=new float[maxCur][maxNum4];
+  pullAng4=new float[maxCur][maxNum4];
+
+  partiX4=new float[maxCur][maxNum4];
+  partiY4=new float[maxCur][maxNum4];
+
+  index4= new int[maxCur][maxNum4];
+
+  stellarClass= new char[maxNum];
+  indexSize=new int[maxNum];
+  //luminosity=new float[maxNum];
+}//instant
+
+void initi(int type) {
+  if (type==1) {
+    maxNum=(int)chosenmaxNumItem(1);
+    sizeRef=chosenmaxNumItem(2);
+    massRefRef=chosenmaxNumItem(3);
+    enLoss=chosenmaxNumItem(4);
+    instant();
+  }//if
+  for (int k=0; k<maxCur; k++) {
+    do {
+      objX[k]=normRan(0, width);
+      objY[k]=normRan(0, height);
+    } while (overlapSearchLocal(objX, maxCur, k)&&overlapSearchLocal(objY, maxCur, k));
+  }//for
+
+  float sPM=76.45, sPK=12.1, sPG=7.6, sPF=3, sPA=.6, sPB=.13, sPO=.0003;
+  float sizeProportionSum=sPM+sPK+sPG+sPF+sPA+sPB+sPO;
+  for (int k=0; k<maxCur; k++) {//size
+    objSize[k]=chiRan(sizeRef/6.6*.7, sizeRef, 2, 13.45087);//chi sq 2. random var: size, mass; cannot include luminosity
+    objZ[k]=normRan(-objSize[k], objSize[k]);
+  }//for
+
+  indexSize=indexObjSize();//sort from high to low
+  //for(int k=0; k<maxCur; k++){
+  //  println(objSize[k]);
+  //  println(indexSize[k]);
+  //}//for
+  //exit();
+
+  for (int k=0; k<maxCur; k++)//classify by size
+    if (indexSize[k]<=(maxCur-1)*sPM/sizeProportionSum)
+      stellarClass[k]='M';
+    else if (indexSize[k]>(maxCur-1)*sPM/sizeProportionSum/2 &&indexSize[k]<=(maxCur-1)*(sPM+sPK)/sizeProportionSum)
+      stellarClass[k]='K';
+    else if (indexSize[k]>(maxCur-1)*(sPM+sPK)/sizeProportionSum &&indexSize[k]<=(maxCur-1)*(sPM+sPK+sPG)/sizeProportionSum)
+      stellarClass[k]='G';
+    else if (indexSize[k]>(maxCur-1)*(sPM+sPK+sPG)/sizeProportionSum &&indexSize[k]<=(maxCur-1)*(sPM+sPK+sPG+sPF)/sizeProportionSum)
+      stellarClass[k]='F';
+    else if (indexSize[k]>(maxCur-1)*(sPM+sPK+sPG+sPF)/sizeProportionSum &&indexSize[k]<=(maxCur-1)*(sPM+sPK+sPG+sPF+sPA)/sizeProportionSum)
+      stellarClass[k]='A';
+    else if (indexSize[k]>(maxCur-1)*(sPM+sPK+sPG+sPF+sPA)/sizeProportionSum &&indexSize[k]<=(maxCur-1)*(sPM+sPK+sPG+sPF+sPA+sPB)/sizeProportionSum)
+      stellarClass[k]='B';
+    else 
+    stellarClass[k]='O';
+
+  //printArray(stellarClass);
+  //exit();
+  /*if skew left, left tail longer, and more likelihood loading on the higher side
+   **if skew right, right tail longer, and more likelihood loading on the lower side
+   */
+  //if (type!=1)
+  //massRefRef=pow(GOLDRAT, pow(GOLDRAT, -pow(GOLDRAT, -2)));
+  float massRef=sizeRef*massRefRef;
+  for (int k=0; k<maxCur; k++)//assign color and mass
+    if (stellarClass[k]=='O') {
+      col[k]=stellaTypes[0];
+      pull[k]=massRef;
+      //luminosity[k]=normRan(3.31*exp(4), 3.41*exp(7));
+    } else if (stellarClass[k]=='B') {
+      col[k]=stellaTypes[(int)normRan(1, 4)];
+      pull[k]=massRef*normRan1(2.1/16, 1, 'l');
+    } else if (stellarClass[k]=='A') {
+      col[k]=stellaTypes[(int)normRan(5, 7)];
+      pull[k]=massRef*normRan1(1.4/16, 2.1/16, 'l');
+    } else if (stellarClass[k]=='F') {
+      col[k]=stellaTypes[(int)normRan(8, 11)];
+      pull[k]=massRef*normRan(1.04/16, 1.4/16);
+    } else if (stellarClass[k]=='G') {
+      col[k]=stellaTypes[(int)normRan(12, 14)];
+      pull[k]=massRef*normRan(.8/16, 1.04/16);
+    } else if (stellarClass[k]=='K') {
+      col[k]=stellaTypes[(int)normRan(15, 17)];
+      pull[k]=massRef*normRan1(.45/16, .8/16, 'r');
+    } else if (stellarClass[k]=='M') {
+      col[k]=stellaTypes[(int)normRan(18, 20)];
+      pull[k]=massRef*normRan1(.08/16, .45/16, 'r');
+    }//if
+
+  movement();
+
+  //printArray(stellarClass);
+  //exit();
+}//initi
+
+void movement() {
+  //change object-to-object magnitude and angles
+  for (int action=0; action<maxCur; action++)
+    for (int reaction=0; reaction<maxCur; reaction++)
+      if (action!=reaction) {
+        magPull[action][reaction]=mag(objY[action]-objY[reaction], objX[action]-objX[reaction]);
+        angPull[action][reaction]=atan2(objY[action]-objY[reaction], objX[action]-objX[reaction]);
+        magPullXYZ[action][reaction]=mag(objZ[action]-objZ[reaction], objY[action]-objY[reaction], objX[action]-objX[reaction]);
+        angPullXYZ[action][reaction]=atan2(magPull[action][reaction], objZ[action]-objZ[reaction]);
+      }//if
+
+  //change objects' velocity
+  float weightXY=1, weightZ=1;//sqrt(15)/4
+  float energyLoss=pow(GOLDRAT, enLoss);
+  for (int obj=0; obj<maxCur; obj++)
+    for (int reactor=0; reactor<maxCur; reactor++)
+      if (obj>reactor)
+        /* Spherical coordinate: x^2+y^2+z^2=r^2
+         Weight the velocities on the x,y direction over that on the z direction
+         */
+        if (magPull[obj][reactor]>=(objSize[obj]+objSize[reactor])/2&&
+          magPullXYZ[obj][reactor]>=(objSize[obj]+objSize[reactor])/2) {//not collide
+          //x
+          objVelX[obj]-=weightXY*pull[obj]*pull[reactor]*cos(angPull[obj][reactor])*
+            sin(angPullXYZ[obj][reactor])/magPullXYZ[obj][reactor];
+          objVelX[reactor]-=weightXY*pull[obj]*pull[reactor]*cos(PI+angPull[obj][reactor])*
+            sin(angPullXYZ[obj][reactor])/magPullXYZ[obj][reactor];
+          //y
+          objVelY[obj]-=weightXY*pull[obj]*pull[reactor]*sin(angPull[obj][reactor])*
+            sin(angPullXYZ[obj][reactor])/magPullXYZ[obj][reactor];
+          objVelY[reactor]-=weightXY*pull[obj]*pull[reactor]*sin(PI+angPull[obj][reactor])*
+            sin(angPullXYZ[obj][reactor])/magPullXYZ[obj][reactor];
+          //z
+          objVelZ[obj]-=weightZ*pull[obj]*pull[reactor]*cos(angPullXYZ[obj][reactor])/magPullXYZ[obj][reactor];
+          objVelZ[reactor]-=weightZ*pull[obj]*pull[reactor]*cos(PI+angPullXYZ[obj][reactor])/magPullXYZ[obj][reactor];
+          if (collided[obj]&&bounced[obj]) {//collision is illustrated
+            collision[obj]=false;
+            collision[reactor]=false;
+            collided[obj]=false;
+            bounced[obj]=false;
+          }//if
+        } else {//collide
+          if (magPull[obj][reactor]!=0&&
+            magPullXYZ[obj][reactor]!=0) {
+            //x
+            objVelX[obj]+=weightXY*pull[obj]*pull[reactor]*cos(angPull[obj][reactor])*
+              sin(angPullXYZ[obj][reactor])/magPullXYZ[obj][reactor]*energyLoss;
+            objVelX[reactor]+=weightXY*pull[obj]*pull[reactor]*cos(PI+angPull[obj][reactor])*
+              sin(angPullXYZ[obj][reactor])/magPullXYZ[obj][reactor]*energyLoss;
+            //y
+            objVelY[obj]+=weightXY*pull[obj]*pull[reactor]*sin(angPull[obj][reactor])*
+              sin(angPullXYZ[obj][reactor])/magPullXYZ[obj][reactor]*energyLoss;
+            objVelY[reactor]+=weightXY*pull[obj]*pull[reactor]*sin(PI+angPull[obj][reactor])*
+              sin(angPullXYZ[obj][reactor])/magPullXYZ[obj][reactor]*energyLoss;
+            //z
+            objVelZ[obj]+=weightZ*pull[obj]*pull[reactor]*cos(angPullXYZ[obj][reactor])/magPullXYZ[obj][reactor]*energyLoss;
+            objVelZ[reactor]+=weightZ*pull[obj]*pull[reactor]*cos(PI+angPullXYZ[obj][reactor])/magPullXYZ[obj][reactor]*energyLoss;
+            bounced[obj]=true;
+            bounced[reactor]=true;
+          }//if
+          collision[obj]=true;
+          collision[reactor]=true;
+        }//if
+
+  //change displacement
+  for (int obj=0; obj<maxCur; obj++) {
+    objX[obj]+=objVelX[obj];
+    objY[obj]+=objVelY[obj];
+    objZ[obj]+=objVelZ[obj];
+  }//for
+
+  //indexZ=indexZ();
+
+  for (int k=0; k<maxCur; k++)
+    if (collision[k])
+      flairIniti(k);
+}//movement
+
+float magSp=0;
+float gravityOnObj=0;
+float distance=0;
+color lerpColor;
+void drawObj(int obj) {
+
+
+  magSp=mag(objVelX[obj], objVelY[obj]);
+  gravityOnObj=0;
+  distance=0;
+  float temp=detectMax(pull);
+  for (int k=0; k<maxCur; k++)
+    if (obj!=k) {
+      //gravityOnObj+=pull[k]/detectMax(pull)/pow(GOLDRAT, pow(GOLDRAT, 1/GOLDRAT));
+      //distance+=magPull[obj][k]/min(width, height)*GOLDRAT;
+      gravityOnObj+=pull[k]/temp/pow(GOLDRAT, pow(GOLDRAT, 1/GOLDRAT)-1)*min(abs(-log(maxCur/GOLDRAT+3)+log(10/GOLDRAT)), 1);
+      distance+=magPull[obj][k]/mag(height, width)*pow(GOLDRAT, 2)*min(pow(abs(-log(maxCur/GOLDRAT+3)+log(10/GOLDRAT)), GOLDRAT), 1);
+    }//if
+  //moderate the effect of the number of objects to the grav sum and dist sum
+  //gravityOnObj+=log(maxCur/GOLDRAT+3)-log(10/GOLDRAT+3);
+  //distance+=log(maxCur/GOLDRAT+3)-log(10/GOLDRAT+3);
+  //gravityOnObj-=abs(-log(maxCur/GOLDRAT+3)+log(10/GOLDRAT))/GOLDRAT;
+  //distance-=abs(-log(maxCur/GOLDRAT+3)+log(10/GOLDRAT))/GOLDRAT;
+  println(obj+ " sp: " +magSp);
+  println("grav: "+ gravityOnObj);
+  println("dist: "+distance);
+  //exit();
+
+  //lerpColor=color(gravityOnObj/GOLDRAT, +gravityOnObj*pow(GOLDRAT, 2), 255*distance*pow(GOLDRAT, 2)-gravityOnObj/pow(GOLDRAT, 3));
+  //fill(lerpColor(col[obj],lerpColor,.0));
+  float R=red(col[obj]), G=green(col[obj]), B=blue(col[obj]);
+  int maxLayer=5;
+  float fade=1.25;
+  float newNewSize=constrain(map(objZ[obj], 0, max(width, height), 0, min(width, height)), -objSize[obj], min(width, height));
+  float newAlpha=0;//constrain(map(objZ[obj], 0, max(width, height), 0, 255), 0, 255);
+  for (int layer=1; layer<maxLayer; layer++) {
+    if (stellarClass[obj]=='G')
+      fill(R*pow((1-(layer-1)/maxLayer), fade), G*pow((1-(layer-1)/maxLayer), fade), B*pow((1-(layer-1)/maxLayer), fade), (255-newAlpha)*(1-pow(GOLDRAT, 2)));
+    else if (stellarClass[obj]=='K')
+      fill(R*pow((1-(layer-1)/maxLayer), fade), G*pow((1-(layer-1)/maxLayer), fade), B*pow((1-(layer-1)/maxLayer), fade), (255-newAlpha)*(1-pow(GOLDRAT, 1.5)));
+    else 
+    if (stellarClass[obj]=='M')
+      fill(R*pow((1-(layer-1)/maxLayer), fade), G*pow((1-(layer-1)/maxLayer), fade), B*pow((1-(layer-1)/maxLayer), fade), (255-newAlpha)*(1-pow(GOLDRAT, 1)));
+    else
+      fill(R*pow((1-(layer-1)/maxLayer), fade), G*pow((1-(layer-1)/maxLayer), fade), B*pow((1-(layer-1)/maxLayer), fade), (255-newAlpha));
+    ellipse(objX[obj], objY[obj], objSize[obj]+newNewSize/sqrt(layer), objSize[obj]+newNewSize/sqrt(layer));
+  }//for
+}//drawObj
+
+/*
+***********************************************FLAIR STUFF**************
+ */
+void flairIniti(int obj) {
+  int k=4;
+  //prevent newSize from dropping to 0 otherwise the program just stops working 
+  radWave4[obj]=fillArray(maxCur4, maxNum4, pow(GOLDRAT, 1)*max(0.25, newSize[obj]), pow(GOLDRAT, -1)*max(0.25, newSize[obj]));
+  spWave4[obj]=fillArray(maxCur4, maxNum4, 1, pow(1/GOLDRAT, 4));
+  moveParticle(obj);
+  angCir4[obj]=fillArray(maxCur4, maxNum4, 0, TWO_PI);
+
+  pull4[obj]=fillArray(maxCur4, maxNum4, detectMin(spWave4[obj])*pow(GOLDRAT, pow(k, GOLDRAT)), detectMax(spWave4[obj])/pow(GOLDRAT, pow(k, GOLDRAT)));
+  interactiveParti(obj);
+
+  index4[obj]=indexAngCir(obj);
+  //for(int j=0; j<maxNum4;j++){
+  //  println(index4[obj][j]);
+  //  println(angCir4[obj][j]);
+  //}//for
+  // exit();
+}//flairIniti
+
+void interactiveParti(int obj) {
+  int j=4;
+  float magMax=40-log(4)+log(partiSize+1);
+  float off=0;
+  for (int k=0; k<maxCur4; k++) {
+    partiVel4[obj][k]-=pow(GOLDRAT, GOLDRAT*7.5)*pull4[obj][k]*pull4[obj][wrapBin(k-1, maxCur4)]*sin(angWave4[obj][k])/max(magMax, abs(radCir4[obj][k]-radCir4[obj][wrapBin(k-1, maxCur4)]))+
+      pow(GOLDRAT, GOLDRAT*7.5)*pull4[obj][k]*pull4[obj][wrapBin(k+1, maxCur4)]*sin(angWave4[obj][k])/max(magMax, abs(radCir4[obj][k]-radCir4[obj][wrapBin(k+1, maxCur4)]));
+    partiVel4[obj][wrapBin(k-1, maxCur4)]-=pow(GOLDRAT, GOLDRAT*7.5)*pull4[obj][k]*pull4[obj][wrapBin(k-1, maxCur4)]*sin(PI+angWave4[obj][k])/max(magMax, abs(radCir4[obj][k]-radCir4[obj][wrapBin(k-1, maxCur4)]));
+    partiVel4[obj][wrapBin(k+1, maxCur4)]-=pow(GOLDRAT, GOLDRAT*7.5)*pull4[obj][k]*pull4[obj][wrapBin(k+1, maxCur4)]*sin(PI+angWave4[obj][k])/max(magMax, abs(radCir4[obj][k]-radCir4[obj][wrapBin(k+1, maxCur4)]));
+    if (timer%(60*pow(GOLDRAT, 5))==0) {//every (60*GOLDRAT) frames, amp up a particle
+      ampCount4=(ampCount4+4)%60;
+      pull4[obj][k]/=pow(GOLDRAT, GOLDRAT*pow(10, -pow(GOLDRAT, ampCount4)));
+      float temp=noiseRan(pow(GOLDRAT, .5*j), 1/GOLDRAT, off);
+      pull4[obj][wrapBin(k-1, maxCur4)]/=pow(GOLDRAT*temp, GOLDRAT*pow(10, -pow(GOLDRAT, ampCount4/2)));
+      pull4[obj][wrapBin(k+1, maxCur4)]/=pow(GOLDRAT*temp, GOLDRAT*pow(10, -pow(GOLDRAT, ampCount4/2)));
+    }//if
+    radWave4[obj][k] +=partiVel4[obj][k]*pow(GOLDRAT, GOLDRAT*7.5);
+    radWave4[obj][k] *=pow(GOLDRAT, GOLDRAT/pow(10, 1/GOLDRAT));
+  }//for
+}//interactiveParti
+
+void moveParticle(int obj) {
+  for (int k=0; k<maxCur4; k++) {
+    angWave4[obj][k]=(angWave4[obj][k]+pow(GOLDRAT, GOLDRAT*10)*spWave4[obj][k])%TWO_PI;
+    radCir4[obj][k]=radCirRef4+radWave4[obj][k] *sin(angWave4[obj][k]);
+  }//for
+}//moveParticle
+
+float security=1;
+void modParticle(int obj) {
+  float temp=detectMax(radWave4[obj]);
+  for (int k=0; k<maxCur4; k++) {
+    radWave4[obj][k]-=pow(GOLDRAT, GOLDRAT*10)*security;
+    radWave4[obj][k]*=pow(pow(GOLDRAT, GOLDRAT/10), pow((1+pow(temp, pow(GOLDRAT, -.25))/min(width/2, height/2)), security));
+  }//for
+}//modParticle
+
+void calcParti(int obj) {
+  for (int k=0; k<maxCur4; k++) {
+    partiX4[obj][k]=objX[obj]+radCir4[obj][k]*sin(angCir4[obj][k]);
+    partiY4[obj][k]=objY[obj]+radCir4[obj][k]*cos(angCir4[obj][k]);
+  }//for
+  //  printArray(radCir4[obj]);
+  // exit();
+}//calcParti
+
+void drawCurve(int obj) {
+  noStroke();
+  //color temp =color (R[obj]+gravityOnObj/GOLDRAT+magSp, G[obj]-gravityOnObj/pow(GOLDRAT, 1)+magSp, B[obj]*distance*pow(GOLDRAT, 2)-gravityOnObj/pow(GOLDRAT, 3)-magSp*GOLDRAT);
+  color temp=col[obj];
+  //temp=col[obj]+color(gravityOnObj/GOLDRAT+magSp,-gravityOnObj/pow(GOLDRAT, 1)+magSp,B[obj]*distance*pow(GOLDRAT, 2)-gravityOnObj/pow(GOLDRAT, 3)-magSp*GOLDRAT);
+  //fill(lerpColor(temp,lerpColor,.6), 255*(1-pow(GOLDRAT, .625*0+.625))*pow(GOLDRAT, pow(0, 1/GOLDRAT)));
+  if (stellarClass[obj]=='G')
+    fill(col[obj], 255*(1-pow(GOLDRAT, .75+.625))*pow((indexZ[obj])/(maxCur-1), pow(GOLDRAT, 2)));
+  else if (stellarClass[obj]=='K')
+    fill(col[obj], 255*(1-pow(GOLDRAT, 1.25+.625))*pow((indexZ[obj])/(maxCur-1), pow(GOLDRAT, 2)));
+  else 
+  if (stellarClass[obj]=='M')
+    fill(col[obj], 255*(1-pow(GOLDRAT, 2+.625))*pow((indexZ[obj])/(maxCur-1), pow(GOLDRAT, 2)));
+  else
+    fill(temp, 255*(1-pow(GOLDRAT, .625))*pow((indexZ[obj])/(maxCur-1), pow(GOLDRAT, 2)));
+  if (maxCur4<=10) {
+    if (stellarClass[obj]=='K')
+      fill(col[obj], 255*(1-pow(GOLDRAT, 4+.625))*(maxCur-indexZ[obj])/(maxCur));
+    else 
+    if (stellarClass[obj]=='M')
+      fill(col[obj], 255*(1-pow(GOLDRAT, 2.5+.625))*(maxCur-indexZ[obj])/(maxCur));
+    else
+      stroke(temp, 255*(1-pow(GOLDRAT, .625))*(maxCur-indexZ[obj])/(maxCur));
+    strokeWeight(2);
+  }//if
+  for (int k=0; k<maxCur4; k++) {
+    beginShape();//curve vertex
+    curveVertex(partiX4[obj][index4[obj][wrapBin(k-3, maxCur4)]], partiY4[obj][index4[obj][wrapBin(k-3, maxCur4)]]);
+    curveVertex(partiX4[obj][index4[obj][wrapBin(k-2, maxCur4)]], partiY4[obj][index4[obj][wrapBin(k-2, maxCur4)]]);
+    curveVertex(partiX4[obj][index4[obj][wrapBin(k-1, maxCur4)]], partiY4[obj][index4[obj][wrapBin(k-1, maxCur4)]]);
+    curveVertex(partiX4[obj][index4[obj][k]], partiY4[obj][index4[obj][k]]);
+    curveVertex(partiX4[obj][index4[obj][wrapBin(k+1, maxCur4)]], partiY4[obj][index4[obj][wrapBin(k+1, maxCur4)]]);
+    curveVertex(partiX4[obj][index4[obj][wrapBin(k+2, maxCur4)]], partiY4[obj][index4[obj][wrapBin(k+2, maxCur4)]]);
+    curveVertex(partiX4[obj][index4[obj][wrapBin(k+3, maxCur4)]], partiY4[obj][index4[obj][wrapBin(k+3, maxCur4)]]);
+    endShape();//draw a curved vertex
+  }//for
+  //drawObj(obj);
+}//drawCurve
+
+int[] indexAngCir(int obj) { 
+  float[] sort_angCir=sort(angCir4[obj]);
+  int[] ind= new int[maxNum4];
+  for (int count=0; count<maxNum4; count++)
+    for (int k=0; k<maxNum4; k++)
+      if (angCir4[obj][k]==sort_angCir[count])
+        ind[count]=k;
+  return ind;
+}//indexAngCir
+
+float[] fillArray(int n, int sizeArray, float min, float max) {
+  float[] temp1= new float[sizeArray];
+  float[] temp2= new float[sizeArray];
+  temp2[0]=normRan(min, max);
+  temp1[0]=temp2[0];
+  if (min>=max)//prevent glitch
+    for (int k=0; k<n; k++)
+      temp1[k]=min;
+  else
+    for (int j=1; j<n; j++) {//for all elements on the first n th bins, EXCEPT the 0th bin
+      do {//redraw temp[j] if it overlaps with any of the previous dots
+        temp2[j]=normRan(min, max);
+      } while (overlapSearchLocal(temp1, n, temp2[j])); //do-while
+      temp1[j]=temp2[j];
+    }//for
+
+  return temp1;
+}//fillArray
+
+boolean overlapSearchLocal(float[] x, int n, float x2) {
+  for (int k=0; k<n; k++) {//for all elements on the first n th bins
+    if (x[k]==x2)//if any item in an array has the same value with x2
+      return true;//break the loop; and return overlapSearchLocal=true;
+  }
+  return false;//return overlapSearchLocal=false;
+}//overlapSearchLocal
+/*
+***************************************************************************USER-DEFINED FUNCTIONS********************************************
+ */
+
+float normRan(float min, float max) {// a more advanced, more flexible substitution to random(min,max). no skew
+  //https://discourse.processing.org/t/best-random-number-generator/4674/5
+  float hi=random(2, 3);
+  float lo=hi;
+  if (min==max)
+    return min;
+  else if (min<0)
+    return 0;
+  return constrain(map(pow(randomGaussian(), 1), -lo, hi, min, max), min, max);
+}//normRan
+
+float normRan1(float min, float max, char skewness) {// skew left or right. take 'l' or 'r'
+  /*if skew left, left tail longer, and more likelihood loading on the higher side
+   **if skew right, right tail longer, and more likelihood loading on the lower side
+   */
+
+  float hi=0, lo=0;
+  if (min==max)
+    return min;
+  else if (min<0)
+    return 0;
+  if (skewness=='l') {
+    hi=random(2, 3);
+    lo=hi/GOLDRAT;
+  } else if (skewness=='r') {
+    hi=random(2, 3);
+    lo=hi*GOLDRAT;
+  }//if
+  //if not 'l' or 'r', return junk
+  return constrain(map(pow(randomGaussian(), 1), -lo, hi, min, max), min, max);
+}//normRan1
+
+float noiseRan(float min, float max, float offset) {
+  return map(noise(offset+=1/maxCur), 0, 1, min, max);
+}//noiseRan
+
+float chiRan(float min, float max, int df, float upperCutoff) {// chi sq, deg of free=deg
+
+  float hi=upperCutoff;//?
+  float lo=0;
+  if (min==max)
+    return min;
+  else if (min<0)
+    return 0;
+  return constrain(map(pow(randomGaussian(), 2)*df, lo, hi, min, max), min, max);
+}//charRan
+
+boolean overlapSearchLocal(float[] x, int n, int j) {
+
+  for (int k=0; k<n; k++) {//for all elements on the first n th bins
+    if (x[k]==x[j] &&k!=j)//if any item in an array has the same value with x2
+      return true;//break the loop; and return overlapSearchLocal=true;
+  }
+
+  return false;//return overlapSearchLocal=false;
+}//overlapSearchLocal
+
+float detectMax(float[] a) {
+  float max=a[0];
+  for (int k=1; k<a.length; k++)
+    if (a[k]>max)
+      max=a[k];
+  return max;
+}//detectMax
+
+float detectMin(float[] a) {
+  float min=a[0];
+  for (int k=1; k<a.length; k++)
+    if (a[k]<min)
+      min=a[k];
+  return min;
+}//detectMin
+
+int wrapBin(int bin, int binMax) {//not used
+  int noWrap=bin;
+  if (binMax<=bin)
+    return bin-binMax;
+  else if (bin<0)
+    return bin+binMax;
+  return noWrap;
+}//wrapBin
+
+float chosenmaxNumItem(int type) {
+  float temp1=pow(GOLDRAT, pow(GOLDRAT, -pow(GOLDRAT, -2)));
+  String b="";
+  if (type==1)
+    b="maximum number of objects\n If it's not an integer, it'll get rounded.\n but it must be at least 1.\n It is currently set to "+maxNum+".";
+  else if (type==2)
+    b="maximum size of objects\n Any reasonable positive number will do.\n It is currently set to "+sizeRef+".";
+  else if (type==3)
+    b="some reference point for the gravitational pull.\n It is tied to the size of each object.\n It is currently set to "+massRefRef+".\n Press d to reset to default "+temp1;
+    else if(type==4)
+    b="some reference point for the rate of energy loss.\n It is currently set to "+enLoss+".";
+  String temp=JOptionPane.showInputDialog("Please choose a "+b);
+  float number;//temp for maxNumItem
+
+  if (temp==null)//to avoid NPE, if there is no input,
+    number=-10000;//assign number to an impossible value such that there is a redraw
+  else if (type==3 && (temp.charAt(0)=='d'||temp.charAt(0)=='D'))//if massRefRef is set back to default
+    return temp1;
+  else
+    if (type==1)
+      number=parseInt(temp);
+    else
+      number=parseFloat(temp);
+
+  if (type==1)
+    while (number<=0) {//keep prompting until the user input a valid maxNumItem
+      temp=JOptionPane.showInputDialog("What you entered is not a valid "+b+"\n Pretty Please!!");
+      if (temp==null)//to avoid NPE, if there is no input,
+        number=0;//assign number to such that there is a redraw
+      else
+        number=parseInt(temp);
+    }//while
+  else if (type==2||type==4)
+    while (number<=0) {//keep prompting until the user input a valid maxNumItem
+      temp=JOptionPane.showInputDialog("What you entered is not a valid "+b+"\n Pretty Please!!");
+      if (temp==null)//to avoid NPE, if there is no input,
+        number=0;//assign number to such that there is a redraw
+      else
+        number=parseFloat(temp);
+    }//while
+  else if (type==3)
+    while (number<-10000) {//keep prompting until the user input a valid maxNumItem
+      temp=JOptionPane.showInputDialog("What you entered is not a valid "+b+"\n Pretty Please!!");
+      if (temp==null)//to avoid NPE, if there is no input,
+        number=-10000;//assign number to such that there is a redraw
+      else
+        number=parseFloat(temp);
+    }//while
+
+  return number;
+}//chosenmaxNumItem
+
+boolean ptInCanvas(float x, float y, float left, float top, float wide, float high) {
+  return (x>=left && x<=left+wide && y>=top && y<=top+high);
+}//ptInCanvas
+
+int ptCount() {
+  int temp=0;
+  for (int k=0; k<maxCur; k++)
+    if (ptInCanvas(objX[k], objY[k], 0, 0, width, height))
+      temp++;
+  return temp;
+}//ptCount
+
+int[] indexObjSize() { //index objSize. 
+  float[] sort_objSize=sort(objSize);
+  int[] ind= new int[maxNum];
+  for (int count=0; count<maxCur; count++)
+    for (int k=0; k<maxCur; k++)
+      if (objSize[count]==sort_objSize[k])
+        ind[count]=k;
+  return ind;
+}//indexObjSize
+
+int[] indexZ() { //index objSize. //highest to lowest
+  float[] sort_Z=sort(objZ);
+  int[] ind= new int[maxNum];
+  for (int count=0; count<maxCur; count++)
+    for (int k=0; k<maxCur; k++)
+      if (objZ[count]==sort_Z[k])
+        ind[count]=k;//maxCur-1-k;
+  return ind;
+}//indexZ
